@@ -4246,7 +4246,7 @@ function savePayoutRecord(){
     const[ma,ya]=a.month.split(' ');const[mb,yb]=b.month.split(' ');
     return ya!==yb?ya-yb:mo.indexOf(ma)-mo.indexOf(mb);
   });
-  localStorage.setItem('asc_payout', JSON.stringify(payoutHistory));
+  localStorage.setItem('asc_payout', JSON.stringify(payoutHistory));scheduleCloudSync();
   renderPayoutHistory();
   alert(`✓ Saved: ${teamName} payout for ${mo} = ${fmt(payout)} at ${pct}%`);
 }
@@ -4254,7 +4254,7 @@ function savePayoutRecord(){
 function deletePayoutRecord(month){
   if(!confirm('Remove saved record for '+month+'?'))return;
   payoutHistory = payoutHistory.filter(r=>r.month!==month);
-  localStorage.setItem('asc_payout', JSON.stringify(payoutHistory));
+  localStorage.setItem('asc_payout', JSON.stringify(payoutHistory));scheduleCloudSync();
   renderPayoutHistory();
 }
 
@@ -6588,7 +6588,7 @@ dz.addEventListener('click',()=>$('fi2').click());
 let ADJUSTMENTS = JSON.parse(localStorage.getItem('asc_adjustments')||'[]');
 
 function saveAdjustments(){
-  localStorage.setItem('asc_adjustments', JSON.stringify(ADJUSTMENTS));
+  localStorage.setItem('asc_adjustments', JSON.stringify(ADJUSTMENTS));scheduleCloudSync();
   updateAdjBadge();
 }
 
