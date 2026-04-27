@@ -5081,8 +5081,22 @@ function _xlsxSheetToObjs(ws){
   return json.map(r=>{ const o={}; Object.keys(r).forEach(k=>o[String(k).toLowerCase().trim()]=String(r[k]==null?'':r[k])); return o; });
 }
 
+async function _ensureXLSX(){
+  if(typeof XLSX !== 'undefined' && XLSX && XLSX.read) return true;
+  // Fallback: dynamically inject SheetJS from a backup CDN
+  return new Promise((res)=>{
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = ()=>res(typeof XLSX !== 'undefined');
+    s.onerror = ()=>res(false);
+    document.head.appendChild(s);
+  });
+}
+
 async function _readWorkbookSheets(file, mode){
   // mode: 'first' (AP — single sheet) | 'all' (AR — merge every sheet that looks like a payment log)
+  const ok = await _ensureXLSX();
+  if(!ok) throw new Error('XLSX library failed to load (check network / ad-blocker)');
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, {type:'array', cellDates:true});
   if(mode==='first'){
@@ -5117,11 +5131,23 @@ async function handleAPFile(input){
     } else {
       rows = await _readWorkbookSheets(file, 'first');
     }
-    applySmartLoad('ap', parseAPRows(rows), file.name);
+    console.log('[AP upload] file=', file.name, 'rawRows=', rows.length, 'sample=', rows[0]);
+    const parsed = parseAPRows(rows);
+    console.log('[AP upload] parsedRows=', parsed.length, 'sample=', parsed[0]);
+    if(!parsed.length){
+      const msg = `⚠ ${file.name}: 0 rows recognised. Need columns: Load #, Amount, Carrier name. Got: ${Object.keys(rows[0]||{}).join(', ')||'nothing'}`;
+      $('ap-loaded-info').textContent = msg;
+      $('ap-loaded-info').style.color='var(--red)';
+      try{ showToast(msg,'error'); }catch{}
+      return;
+    }
+    applySmartLoad('ap', parsed, file.name);
   } catch(e){
     console.error('AP upload error', e);
-    $('ap-loaded-info').textContent = '⚠ Could not read file: '+(e.message||e);
+    const msg = '⚠ Could not read file: '+(e.message||e);
+    $('ap-loaded-info').textContent = msg;
     $('ap-loaded-info').style.color='var(--red)';
+    try{ showToast(msg,'error'); }catch{}
   }
 }
 
@@ -5136,11 +5162,23 @@ async function handleARFile(input){
     } else {
       rows = await _readWorkbookSheets(file, 'all');
     }
-    applySmartLoad('ar', parseARRows(rows), file.name);
+    console.log('[AR upload] file=', file.name, 'rawRows=', rows.length, 'sample=', rows[0]);
+    const parsed = parseARRows(rows);
+    console.log('[AR upload] parsedRows=', parsed.length, 'sample=', parsed[0]);
+    if(!parsed.length){
+      const msg = `⚠ ${file.name}: 0 rows recognised. Need columns: LOAD NUMBER, AMOUNT, CUSTOMER NAME. Got: ${Object.keys(rows[0]||{}).join(', ')||'nothing'}`;
+      $('ar-loaded-info').textContent = msg;
+      $('ar-loaded-info').style.color='var(--red)';
+      try{ showToast(msg,'error'); }catch{}
+      return;
+    }
+    applySmartLoad('ar', parsed, file.name);
   } catch(e){
     console.error('AR upload error', e);
-    $('ar-loaded-info').textContent = '⚠ Could not read file: '+(e.message||e);
+    const msg = '⚠ Could not read file: '+(e.message||e);
+    $('ar-loaded-info').textContent = msg;
     $('ar-loaded-info').style.color='var(--red)';
+    try{ showToast(msg,'error'); }catch{}
   }
 }
 
