@@ -6260,8 +6260,15 @@ function processCSV(text,fname,team){
 
   const existingMap=new Map(DATA.map(d=>[d.id,d]));
   const recs=[];let dupes=0;let updates=0;
-  const diff = {file:fname, new:[], updated:[], removed:[], unchanged:0};
+  const diff = {file:fname, new:[], updated:[], removed:[], unchanged:0, year:null, hadPrior:false, perYear:{}};
   const seenIds = new Set();
+  // detect year(s) from filename — supports "2025"/"2026" anywhere in name
+  const yearMatch = String(fname).match(/(20\d{2})/);
+  diff.year = yearMatch ? yearMatch[1] : null;
+  // count prior loads in DATA for this year (before this upload merges)
+  if(diff.year){
+    diff.hadPrior = DATA.some(d => (d.date||'').endsWith('/'+diff.year) || (d.month||'').endsWith(' '+diff.year));
+  }
   const cutoff = Date.now() - CSX_RETENTION_DAYS*24*60*60*1000;
 
   rows.forEach(r=>{
