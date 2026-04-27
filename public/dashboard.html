@@ -3395,7 +3395,8 @@ function save(){
   try{localStorage.setItem('asc_d',JSON.stringify(DATA));localStorage.setItem('asc_f',JSON.stringify(FILES));}catch(e){}
   scheduleCloudSync();
   // Refresh recon flags whenever Ascend data changes (upload, branch assign, adjustments)
-  try{ if(typeof runLiveRecon==='function') runLiveRecon(); }catch(e){}
+  try{ if(typeof rebuildLoadsIndex==='function') rebuildLoadsIndex(); }catch(e){}
+  try{ if(typeof runLiveRecon==='function') runLiveRecon({silent:true}); }catch(e){ console.warn('runLiveRecon save refresh failed', e); }
 }
 function saveTeams(){
   try{
@@ -5004,20 +5005,22 @@ function _saveToLog(type, rows, sourceName){
 let rfFilter = 'ALL';
 
 // Build global LOADS_DATA lookup from Ascend DATA for reconciliation engine
-// Called once after DATA is available (on first page render)
-function buildLoadsIndex(){
-  if(window.LOADS_DATA && window.LOADS_DATA.length > 0) return;
+// Rebuilt whenever DATA changes so Red Flags always uses the latest Ascend CSV.
+function rebuildLoadsIndex(){
   window.LOADS_DATA = (window.DATA || DATA || []).map(d=>({
     id: d.id,
     customer: d.customer,
     carrier: d.carrier,
     income: parseFloat(d.income||d.rate||0),
-    expense: parseFloat(d.expense||d.bill_amount||d.carrier_rate||0),
-    bill_amount: parseFloat(d.bill_amount||d.expense||d.carrier_rate||0),
+    expense: parseFloat(d.expenses||d.expense||d.bill_amount||d.carrier_rate||0),
+    bill_amount: parseFloat(d.expenses||d.bill_amount||d.expense||d.carrier_rate||0),
     invoice_amount: parseFloat(d.income||d.rate||0),
     status: d.status,
     branch: d.branch,
   }));
+}
+function buildLoadsIndex(){
+  rebuildLoadsIndex();
 }
 function renderRecon(){
   buildLoadsIndex();
@@ -5397,7 +5400,8 @@ function closeSheetPreview(){
   _previewData = [];
 }
 
-function runLiveRecon(){
+function runLiveRecon(opts={}){
+  rebuildLoadsIndex();
   // Build a lookup of Ascend loads: load_id → {income, bill_amount, carrier, customer, status}
   const allLoads = window.LOADS_DATA || [];
   const ascendByLoad = {};
@@ -5526,11 +5530,14 @@ function runLiveRecon(){
 
   const highCount = finalFlags.filter(f=>f.severity==='HIGH').length;
   const medCount = finalFlags.filter(f=>f.severity==='MEDIUM').length;
-  $('lc-status').textContent = `✓ Check complete — ${highCount} high, ${medCount} medium flags found`;
-  $('lc-status').style.color = highCount>0?'var(--red)':'var(--green)';
+  const statusEl = $('lc-status');
+  if(statusEl && !opts.silent){
+    statusEl.textContent = `✓ Check complete — ${highCount} high, ${medCount} medium flags found`;
+    statusEl.style.color = highCount>0?'var(--red)':'var(--green)';
+  }
 
   rfFilter = 'ALL';
-  renderRecon();
+  if(!opts.silent) renderRecon();
 }
 
 // ── PAGE: WEEKLY PAYMENTS ─────────────────────────────────────────────────────
