@@ -6440,6 +6440,7 @@ function handleFiles(files){
       // We do this even if nothing new — captures the upload event.
       const allMerged = DATA.concat(records);
       csxSaveSnapshot(file.name, allMerged, diff);
+      try { showAscendYearBanner(diff); } catch(e){ console.warn('year banner err', e); }
 
       if(!records.length&&!updates){
         renderDiffBanner();
