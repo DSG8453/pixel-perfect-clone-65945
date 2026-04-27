@@ -5809,6 +5809,25 @@ function renderCustomerDetail(cu,base){
   }
 }
 
+// Wrappers used by the Add Data (Upload) page — delegate to the existing
+// handlers but also mirror the resulting status into the upload-page info row.
+async function handleAPFileFromUpload(input){
+  const f = input.files && input.files[0];
+  const upInfo = document.getElementById('ap-loaded-info-up');
+  if(upInfo){ upInfo.style.color='var(--text3)'; upInfo.textContent = f ? `Reading ${f.name}…` : ''; }
+  await handleAPFile(input);
+  const src = document.getElementById('ap-loaded-info');
+  if(src && upInfo){ upInfo.textContent = src.textContent; upInfo.style.color = src.style.color || 'var(--green)'; }
+}
+async function handleARFileFromUpload(input){
+  const f = input.files && input.files[0];
+  const upInfo = document.getElementById('ar-loaded-info-up');
+  if(upInfo){ upInfo.style.color='var(--text3)'; upInfo.textContent = f ? `Reading ${f.name}…` : ''; }
+  await handleARFile(input);
+  const src = document.getElementById('ar-loaded-info');
+  if(src && upInfo){ upInfo.textContent = src.textContent; upInfo.style.color = src.style.color || 'var(--green)'; }
+}
+
 
 function renderLanes(){
   const data=fd();
