@@ -14,7 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      csx_snapshots: {
+        Row: {
+          diff_summary: Json | null
+          file_name: string
+          id: string
+          load_count: number
+          loads: Json
+          uploaded_at: string
+        }
+        Insert: {
+          diff_summary?: Json | null
+          file_name: string
+          id?: string
+          load_count?: number
+          loads: Json
+          uploaded_at?: string
+        }
+        Update: {
+          diff_summary?: Json | null
+          file_name?: string
+          id?: string
+          load_count?: number
+          loads?: Json
+          uploaded_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
