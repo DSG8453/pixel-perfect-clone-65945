@@ -5243,11 +5243,15 @@ function applySmartLoad(type, newRows, source){
   $(type+'-clear-btn').style.display = 'inline-block';
   if(vb) vb.style.display = 'inline-block';
 
-  // Save to persistent batch log
+  // Save to persistent batch log (also persists liveAP/liveAR + cloud sync)
   _saveToLog(type, newRows, source);
 
-  // Auto-run reconciliation silently
-  setTimeout(() => runLiveRecon(), 100);
+  // Auto-run reconciliation, then refresh every dashboard tab so all KPIs/tables reflect new data
+  setTimeout(() => {
+    try { runLiveRecon(); } catch(e){ console.warn('runLiveRecon err',e); }
+    try { if(typeof renderAll==='function') renderAll(); } catch(e){ console.warn('renderAll err',e); }
+    try { if(typeof scheduleCloudSync==='function') scheduleCloudSync(); } catch(e){}
+  }, 50);
 
   return true;
 }
