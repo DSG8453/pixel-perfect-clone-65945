@@ -5081,8 +5081,22 @@ function _xlsxSheetToObjs(ws){
   return json.map(r=>{ const o={}; Object.keys(r).forEach(k=>o[String(k).toLowerCase().trim()]=String(r[k]==null?'':r[k])); return o; });
 }
 
+async function _ensureXLSX(){
+  if(typeof XLSX !== 'undefined' && XLSX && XLSX.read) return true;
+  // Fallback: dynamically inject SheetJS from a backup CDN
+  return new Promise((res)=>{
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = ()=>res(typeof XLSX !== 'undefined');
+    s.onerror = ()=>res(false);
+    document.head.appendChild(s);
+  });
+}
+
 async function _readWorkbookSheets(file, mode){
   // mode: 'first' (AP — single sheet) | 'all' (AR — merge every sheet that looks like a payment log)
+  const ok = await _ensureXLSX();
+  if(!ok) throw new Error('XLSX library failed to load (check network / ad-blocker)');
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, {type:'array', cellDates:true});
   if(mode==='first'){
