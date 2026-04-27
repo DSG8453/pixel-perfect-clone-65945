@@ -5284,23 +5284,33 @@ function applySmartLoad(type, newRows, source){
   const check = checkDuplicate(type, newRows);
   const infoEl = $(type+'-loaded-info');
   const vb = $(type+'-view-btn');
+  const label = type.toUpperCase();
+  const hadExisting = (type === 'ap' ? !!(liveAP && liveAP.length) : !!(liveAR && liveAR.length));
 
-  if(check.isDuplicate){
-    infoEl.style.color = 'var(--amber,#d97706)';
-    infoEl.textContent = `⚠ Already loaded — no new changes detected. Data unchanged.`;
-    if(vb) vb.style.display = 'inline-block';
-    return false;
-  }
-
+  // Replace silently instead of blocking on duplicates — show toast for feedback
   if(type === 'ap') liveAP = newRows;
   else liveAR = newRows;
 
-  let msg = `✓ ${newRows.length} rows loaded from ${source}`;
-  if(check.newCount > 0) msg += ` · ${check.newCount} new`;
-  if(check.changedCount > 0) msg += ` · ${check.changedCount} changed`;
+  let msg;
+  let toastMsg;
+  if(check.isDuplicate){
+    msg = `✓ ${label} data replaced — ${newRows.length} rows (no changes detected)`;
+    toastMsg = `${label} data replaced — totals updated`;
+  } else if(hadExisting){
+    msg = `✓ ${label} data replaced — ${newRows.length} rows from ${source}`;
+    if(check.newCount > 0) msg += ` · ${check.newCount} new`;
+    if(check.changedCount > 0) msg += ` · ${check.changedCount} changed`;
+    toastMsg = `${label} data replaced — totals updated`;
+  } else {
+    msg = `✓ ${newRows.length} rows loaded from ${source}`;
+    if(check.newCount > 0) msg += ` · ${check.newCount} new`;
+    if(check.changedCount > 0) msg += ` · ${check.changedCount} changed`;
+    toastMsg = `${label} loaded — ${newRows.length} rows imported`;
+  }
 
   infoEl.style.color = 'var(--green)';
   infoEl.textContent = msg;
+  try { showToast(toastMsg, 'success'); } catch {}
   $(type+'-clear-btn').style.display = 'inline-block';
   if(vb) vb.style.display = 'inline-block';
 
