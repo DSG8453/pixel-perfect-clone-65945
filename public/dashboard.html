@@ -5788,10 +5788,20 @@ function renderTeams(){
 // ── PAGE: ALL LOADS ───────────────────────────────────────────────────────────
 function renderLoads(){
   const q=($('lo-search')?.value||'').toLowerCase();
-  const data=fd().filter(d=>!q||[d.id,d.customer,d.carrier,d.branch,d.origin,d.destination,d.month,d.equipment,d.state].join('|').toLowerCase().includes(q));
-  $('lo-hint').textContent=`${data.length.toLocaleString()} loads`;
-  $('lo-tbl').querySelector('thead').innerHTML=tHead(['ID','Date','Month','Branch','Customer','Origin','Destination','Carrier','Equipment','State','Status','Revenue','GP','GP%','AR','Team']);
+  const flag = window._csxFlagFilter || '';
+  let data=fd().filter(d=>!q||[d.id,d.customer,d.carrier,d.branch,d.origin,d.destination,d.month,d.equipment,d.state].join('|').toLowerCase().includes(q));
+  if(flag) data = data.filter(d => (d._flag||'') === flag);
+  $('lo-hint').textContent=`${data.length.toLocaleString()} loads${flag?` • filtered: ${flag}`:''}`;
+  $('lo-tbl').querySelector('thead').innerHTML=tHead(['Flag','ID','Date','Month','Branch','Customer','Origin','Destination','Carrier','Equipment','State','Status','Revenue','GP','GP%','AR','Team']);
+  const flagCell = d => {
+    const f = d._flag;
+    if(f==='new')      return `<span class="badge b-blue" title="New since last upload">🆕</span>`;
+    if(f==='updated')  return `<span class="badge b-amber" title="Changed: ${(d._changed||[]).join(', ')}">🟡</span>`;
+    if(f==='removed')  return `<span class="badge b-red" title="Missing from latest upload">🔴</span>`;
+    return '';
+  };
   $('lo-tbl').querySelector('tbody').innerHTML=data.slice(0,600).map(d=>`<tr>
+    <td>${flagCell(d)}</td>
     <td class="n">${d.id}</td>
     <td style="font-size:11px">${d.date}</td>
     <td style="font-size:11px;white-space:nowrap">${d.month.replace(' 2026','').replace(' 2025','')}</td>
@@ -5809,6 +5819,7 @@ function renderLoads(){
     <td class="n ${d.balance>0?'gp-neg':''}">${d.balance>0?fmt(d.balance):'—'}</td>
     <td style="font-size:10px;color:var(--text3)">${d.team||''}</td>
   </tr>`).join('');
+  renderDiffBanner();
 }
 
 // ── UPLOAD / CSV ──────────────────────────────────────────────────────────────
