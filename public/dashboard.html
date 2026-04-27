@@ -5223,9 +5223,11 @@ function applySmartLoad(type, newRows, source){
 }
 
 function clearSheet(type){
-  if(type==='ap'){ liveAP=null; $('ap-loaded-info').textContent=''; $('ap-clear-btn').style.display='none'; $('ap-file-input').value=''; const vb=$('ap-view-btn'); if(vb)vb.style.display='none'; }
-  else { liveAR=null; $('ar-loaded-info').textContent=''; $('ar-clear-btn').style.display='none'; $('ar-file-input').value=''; const vb=$('ar-view-btn'); if(vb)vb.style.display='none'; }
+  if(type==='ap'){ liveAP=null; $('ap-loaded-info').textContent=''; $('ap-clear-btn').style.display='none'; $('ap-file-input').value=''; const vb=$('ap-view-btn'); if(vb)vb.style.display='none'; try{localStorage.removeItem('asc_live_ap');}catch{} }
+  else { liveAR=null; $('ar-loaded-info').textContent=''; $('ar-clear-btn').style.display='none'; $('ar-file-input').value=''; const vb=$('ar-view-btn'); if(vb)vb.style.display='none'; try{localStorage.removeItem('asc_live_ar');}catch{} }
   $('lc-status').textContent = 'Sheet cleared';
+  try { if(typeof scheduleCloudSync==='function') scheduleCloudSync(); } catch{}
+  try { runLiveRecon(); if(typeof renderAll==='function') renderAll(); } catch{}
 }
 
 // ── SHEET PREVIEW MODAL ───────────────────────────────────────────────────────
