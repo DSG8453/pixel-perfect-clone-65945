@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ascend Admin Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // Lovable Cloud connection (publishable anon key — safe to embed)
+  window.__SB_URL__  = "https://lngqtiqpfevlyzrbvapl.supabase.co";
+  window.__SB_KEY__  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3F0aXFwZmV2bHl6cmJ2YXBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMzc0NzcsImV4cCI6MjA5MjgxMzQ3N30.lgKoKm9JDVJFC-4D41Yhu-a-1s0A86d7IrN-Oyo_o-w";
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 :root{
@@ -1335,6 +1341,19 @@ input[type=file]{display:none}
   <!-- ALL LOADS -->
   <div id="p-loads" class="page">
     <input class="search" id="lo-search" placeholder="Search by load ID, customer, carrier, branch, origin, destination…" oninput="renderLoads()">
+    <div id="csx-diff-banner" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <strong style="font-size:13px">Last upload diff:</strong>
+          <span id="csx-diff-file" style="font-size:11px;color:var(--text3)"></span>
+          <span class="badge b-blue" style="cursor:pointer" onclick="filterByFlag('new')">🆕 <span id="csx-cnt-new">0</span> New</span>
+          <span class="badge b-amber" style="cursor:pointer" onclick="filterByFlag('updated')">🟡 <span id="csx-cnt-upd">0</span> Updated</span>
+          <span class="badge b-red" style="cursor:pointer" onclick="filterByFlag('removed')">🔴 <span id="csx-cnt-rem">0</span> Removed</span>
+          <span class="badge b-gray" style="cursor:pointer" onclick="filterByFlag('')">All</span>
+        </div>
+        <span style="font-size:11px;color:var(--text3)" id="csx-retention-note">3-month rolling • snapshots stored in Lovable Cloud</span>
+      </div>
+    </div>
     <div class="tcard">
       <div class="tcard-head"><h3>All Loads</h3><span class="hint" id="lo-hint"></span></div>
       <div class="twrap"><table id="lo-tbl"><thead></thead><tbody></tbody></table></div>
@@ -5769,10 +5788,20 @@ function renderTeams(){
 // ── PAGE: ALL LOADS ───────────────────────────────────────────────────────────
 function renderLoads(){
   const q=($('lo-search')?.value||'').toLowerCase();
-  const data=fd().filter(d=>!q||[d.id,d.customer,d.carrier,d.branch,d.origin,d.destination,d.month,d.equipment,d.state].join('|').toLowerCase().includes(q));
-  $('lo-hint').textContent=`${data.length.toLocaleString()} loads`;
-  $('lo-tbl').querySelector('thead').innerHTML=tHead(['ID','Date','Month','Branch','Customer','Origin','Destination','Carrier','Equipment','State','Status','Revenue','GP','GP%','AR','Team']);
+  const flag = window._csxFlagFilter || '';
+  let data=fd().filter(d=>!q||[d.id,d.customer,d.carrier,d.branch,d.origin,d.destination,d.month,d.equipment,d.state].join('|').toLowerCase().includes(q));
+  if(flag) data = data.filter(d => (d._flag||'') === flag);
+  $('lo-hint').textContent=`${data.length.toLocaleString()} loads${flag?` • filtered: ${flag}`:''}`;
+  $('lo-tbl').querySelector('thead').innerHTML=tHead(['Flag','ID','Date','Month','Branch','Customer','Origin','Destination','Carrier','Equipment','State','Status','Revenue','GP','GP%','AR','Team']);
+  const flagCell = d => {
+    const f = d._flag;
+    if(f==='new')      return `<span class="badge b-blue" title="New since last upload">🆕</span>`;
+    if(f==='updated')  return `<span class="badge b-amber" title="Changed: ${(d._changed||[]).join(', ')}">🟡</span>`;
+    if(f==='removed')  return `<span class="badge b-red" title="Missing from latest upload">🔴</span>`;
+    return '';
+  };
   $('lo-tbl').querySelector('tbody').innerHTML=data.slice(0,600).map(d=>`<tr>
+    <td>${flagCell(d)}</td>
     <td class="n">${d.id}</td>
     <td style="font-size:11px">${d.date}</td>
     <td style="font-size:11px;white-space:nowrap">${d.month.replace(' 2026','').replace(' 2025','')}</td>
@@ -5790,6 +5819,7 @@ function renderLoads(){
     <td class="n ${d.balance>0?'gp-neg':''}">${d.balance>0?fmt(d.balance):'—'}</td>
     <td style="font-size:10px;color:var(--text3)">${d.team||''}</td>
   </tr>`).join('');
+  renderDiffBanner();
 }
 
 // ── UPLOAD / CSV ──────────────────────────────────────────────────────────────
@@ -5834,6 +5864,48 @@ function csvRow(row){
   res.push(cur.trim());return res;
 }
 
+// ── CSX SNAPSHOT / DIFF (Lovable Cloud) ───────────────────────────────────────
+const CSX_RETENTION_DAYS = 90; // 3 months rolling
+const CSX_TRACKED_FIELDS = ['status','customer','carrier','branch','origin','destination',
+  'income','expenses','gp','gp_pct','balance','equipment','state',
+  'invoice_sent','invoice_paid','bill_date','bill_paid','bill_ref','carrier_mc'];
+window.LAST_DIFF = null; // {file,new:[],updated:[],removed:[]}
+window._csxFlagFilter = '';
+
+let _sb = null;
+function sb(){
+  if(_sb) return _sb;
+  if(!window.supabase || !window.__SB_URL__) return null;
+  _sb = window.supabase.createClient(window.__SB_URL__, window.__SB_KEY__);
+  return _sb;
+}
+
+// Parse the "Load Created Date" ISO timestamp from the raw CSV row
+function csxParseCreated(v){
+  if(!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function csxWithinRetention(rec){
+  if(!rec._created_at) return true; // keep if unknown
+  const cutoff = Date.now() - CSX_RETENTION_DAYS*24*60*60*1000;
+  return new Date(rec._created_at).getTime() >= cutoff;
+}
+
+function csxDiffRecord(oldR, newR){
+  const changed = [];
+  for(const f of CSX_TRACKED_FIELDS){
+    const a = oldR[f] ?? '', b = newR[f] ?? '';
+    if(typeof a === 'number' || typeof b === 'number'){
+      if(Math.abs((+a||0) - (+b||0)) > 0.001) changed.push(f);
+    } else if(String(a).trim() !== String(b).trim()){
+      changed.push(f);
+    }
+  }
+  return changed;
+}
+
 function processCSV(text,fname,team){
   const rows=parseCSV(text);
   const pM=v=>{try{return parseFloat(String(v).replace(/[$,]/g,''))||0;}catch{return 0;}};
@@ -5844,10 +5916,20 @@ function processCSV(text,fname,team){
 
   const existingMap=new Map(DATA.map(d=>[d.id,d]));
   const recs=[];let dupes=0;let updates=0;
+  const diff = {file:fname, new:[], updated:[], removed:[], unchanged:0};
+  const seenIds = new Set();
+  const cutoff = Date.now() - CSX_RETENTION_DAYS*24*60*60*1000;
 
   rows.forEach(r=>{
     const id=parseInt(r['Load ID']);
     if(!id)return;
+
+    // 3-month rolling filter based on Load Created Date
+    const createdRaw = r['Load Created Date'] || '';
+    const created = csxParseCreated(createdRaw);
+    if(created && created.getTime() < cutoff) return;
+
+    seenIds.add(id);
     const pickup=r['Pickups']||'';
     const date=exD(pickup);
     const origin=exL(pickup);
@@ -5875,34 +5957,113 @@ function processCSV(text,fname,team){
       bill_paid:cD(r['Bill Payment Dates']),
       bill_ref:(r['Bill Ref #']||'').trim(),
       carrier_mc:(r['Carrier MC Number']||'').trim(),
-      team:team||'Main',_file:fname
+      team:team||'Main',_file:fname,
+      _created_at: created ? created.toISOString() : null
     };
     if(existingMap.has(id)){
-      // preserve team/branch assignment if not in new file
       const old=existingMap.get(id);
       if(!rec.team&&old.team)rec.team=old.team;
       if(!rec.branch&&old.branch)rec.branch=old.branch;
-      // update in-place
+      const changed = csxDiffRecord(old, rec);
+      if(changed.length){
+        rec._flag = 'updated';
+        rec._changed = changed;
+        diff.updated.push({id, changed});
+        updates++;
+      } else {
+        rec._flag = 'unchanged';
+        diff.unchanged++;
+      }
       const idx=DATA.findIndex(d=>d.id===id);
       if(idx>-1)DATA[idx]=rec;
-      updates++;
     } else {
+      rec._flag = 'new';
+      diff.new.push(id);
       recs.push(rec);
       existingMap.set(id,rec);
     }
   });
-  return{records:recs,dupes,updates};
+
+  // Detect removed loads — present in DATA from this same file context but missing now.
+  // We compare only against loads from prior uploads of the same source file OR all loads
+  // within the retention window if this is a rolling refresh.
+  const priorIds = new Set(DATA.filter(d => csxWithinRetention(d)).map(d=>d.id));
+  priorIds.forEach(pid => {
+    if(!seenIds.has(pid)){
+      const r = DATA.find(d=>d.id===pid);
+      if(r){ r._flag = 'removed'; diff.removed.push(pid); }
+    }
+  });
+
+  // Purge anything outside the 3-month window from working set
+  DATA = DATA.filter(d => csxWithinRetention(d));
+
+  window.LAST_DIFF = diff;
+  return{records:recs,dupes,updates,diff};
+}
+
+async function csxSaveSnapshot(fname, allLoads, diff){
+  const client = sb();
+  if(!client) return;
+  try{
+    // Insert this snapshot
+    await client.from('csx_snapshots').insert({
+      file_name: fname,
+      load_count: allLoads.length,
+      loads: allLoads,
+      diff_summary: {
+        new: diff.new.length,
+        updated: diff.updated.length,
+        removed: diff.removed.length,
+        unchanged: diff.unchanged,
+        updated_ids: diff.updated.slice(0,500),
+        new_ids: diff.new.slice(0,500),
+        removed_ids: diff.removed.slice(0,500)
+      }
+    });
+    // Cleanup snapshots older than retention
+    const cutoffISO = new Date(Date.now() - CSX_RETENTION_DAYS*24*60*60*1000).toISOString();
+    await client.from('csx_snapshots').delete().lt('uploaded_at', cutoffISO);
+  } catch(err){
+    console.warn('CSX snapshot save failed:', err);
+  }
+}
+
+function renderDiffBanner(){
+  const b = document.getElementById('csx-diff-banner');
+  if(!b) return;
+  const d = window.LAST_DIFF;
+  if(!d){ b.style.display='none'; return; }
+  b.style.display='block';
+  document.getElementById('csx-diff-file').textContent = d.file || '';
+  document.getElementById('csx-cnt-new').textContent = d.new.length;
+  document.getElementById('csx-cnt-upd').textContent = d.updated.length;
+  document.getElementById('csx-cnt-rem').textContent = d.removed.length;
+}
+
+function filterByFlag(flag){
+  window._csxFlagFilter = flag;
+  renderLoads();
 }
 
 function handleFiles(files){
   Array.from(files).forEach(file=>{
     const reader=new FileReader();
-    reader.onload=e=>{
-      const{records,dupes,updates}=processCSV(e.target.result,file.name,'');
-      if(!records.length&&!updates){alert(`No new or updated loads found in ${file.name}.`);return;}
-      if(updates>0){save();buildFilters();renderAll();updateSidebar();}
+    reader.onload=async e=>{
+      const{records,dupes,updates,diff}=processCSV(e.target.result,file.name,'');
+      // Persist snapshot to Cloud (full current dataset after merge)
+      // We do this even if nothing new — captures the upload event.
+      const allMerged = DATA.concat(records);
+      csxSaveSnapshot(file.name, allMerged, diff);
+
+      if(!records.length&&!updates){
+        renderDiffBanner();
+        alert(`No new or updated loads found in ${file.name}.\n\n🆕 ${diff.new.length} • 🟡 ${diff.updated.length} • 🔴 ${diff.removed.length}`);
+        return;
+      }
+      if(updates>0){save();buildFilters();renderAll();updateSidebar();renderDiffBanner();}
       if(!records.length){
-        const msg=`✓ Updated ${updates} existing load${updates!==1?'s':''} from ${file.name}.`;
+        const msg=`✓ Updated ${updates} existing load${updates!==1?'s':''} from ${file.name}.\n\n🆕 ${diff.new.length} New • 🟡 ${diff.updated.length} Updated • 🔴 ${diff.removed.length} Removed`;
         alert(msg);return;
       }
       // update branch history first
@@ -5910,6 +6071,7 @@ function handleFiles(files){
       _pendingUpdates = updates;
       // show branch assignment modal
       showBranchModal(records, file.name);
+      renderDiffBanner();
     };
     reader.readAsText(file);
   });
