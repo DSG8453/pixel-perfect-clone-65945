@@ -1689,6 +1689,7 @@ function loadExpData(){
 
 function saveExpData(){
   try{localStorage.setItem('asc_exp',JSON.stringify(EXP_DATA));}catch(e){}
+  scheduleCloudSync();
 }
 
 function renderExpenses(){
