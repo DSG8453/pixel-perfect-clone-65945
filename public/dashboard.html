@@ -5551,17 +5551,19 @@ function renderWeekly(){
 
 // ── PAGE: AR ──────────────────────────────────────────────────────────────────
 function renderAR(){
-  const data=fd(d=>d.balance>0);
+  const collectedSet = _collectedLoadIdsFromAR();
+  const data=fd(d=>d.balance>0 && !collectedSet.has(d.id));
   const all=fd();
   const totalAR=data.reduce((s,d)=>s+d.balance,0);
   const totalInv=all.reduce((s,d)=>s+d.income,0);
+  const clearedCount = collectedSet.size;
   $('ar-kpi').innerHTML=kpiHTML([
     {label:'Outstanding AR',val:fmt(totalAR),sub:`${data.length} open invoices`,color:'red'},
-    {label:'Total Revenue',val:fmt(totalInv),color:'blue'},
+    {label:'Collected via AR Sheet',val:clearedCount,sub:clearedCount?'From uploaded payment sheet':'Upload AR sheet to track',color:clearedCount?'green':''},
     {label:'AR as % of Revenue',val:totalInv>0?((totalAR/totalInv)*100).toFixed(1)+'%':'—',color:'amber'},
     {label:'Avg Invoice Balance',val:data.length?fmt(totalAR/data.length):'—'},
   ]);
-  $('ar-hint').textContent=`${data.length} open invoices`;
+  $('ar-hint').textContent=`${data.length} open invoices${clearedCount?` · ${clearedCount} collected via uploaded AR sheet`:''}`;
 
   const sorted=data.sort((a,b)=>b.balance-a.balance);
   $('ar-tbl').querySelector('thead').innerHTML=tHead(['Load ID','Customer','Branch','Date','Status','Invoice Sent','Balance Owed','Carrier']);
