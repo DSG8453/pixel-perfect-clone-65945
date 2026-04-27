@@ -6392,10 +6392,11 @@ function handleFiles(files){
 
       if(!records.length&&!updates){
         renderDiffBanner();
+        renderAll();
         alert(`No new or updated loads found in ${file.name}.\n\n🆕 ${diff.new.length} • 🟡 ${diff.updated.length} • 🔴 ${diff.removed.length}`);
         return;
       }
-      if(updates>0){save();buildFilters();renderAll();updateSidebar();renderDiffBanner();}
+      if(updates>0){save();renderAll();renderDiffBanner();}
       if(!records.length){
         const msg=`✓ Updated ${updates} existing load${updates!==1?'s':''} from ${file.name}.\n\n🆕 ${diff.new.length} New • 🟡 ${diff.updated.length} Updated • 🔴 ${diff.removed.length} Removed`;
         alert(msg);return;
@@ -6762,11 +6763,26 @@ function renderPage(page){
   }catch(e){ console.error('renderPage error ['+page+']:', e); const main=document.querySelector('.content'); if(main){ const err=document.getElementById('_page_error')||document.createElement('div'); err.id='_page_error'; err.style.cssText='margin:16px 24px;padding:12px 16px;background:var(--red-l);border:1px solid var(--red-b);border-radius:8px;font-size:12px;color:var(--red)'; err.textContent='⚠ Error loading page: '+e.message; if(!document.getElementById('_page_error')) document.querySelector('.main')?.prepend(err); } }
 }
 
+// Master refresh — call after ANY data load (AP/AR/Ascend/cloud pull).
+// Re-runs reconciliation, rebuilds filters, re-renders the active page (which
+// destroys+recreates its charts via dc()), and refreshes sidebar/badges.
 function renderAll(){
-  const active=document.querySelector('.page.active');
-  if(active)renderPage(active.id.replace('p-',''));
-  setTimeout(injectFullscreenButtons, 50);
-  updateAdjBadge();
+  // 1. Re-run live reconciliation so AP/AR ↔ Ascend matching is current
+  try { if(typeof runLiveRecon==='function') runLiveRecon(); } catch(e){ console.warn('renderAll: runLiveRecon failed', e); }
+  // 2. Destroy ALL existing chart instances so the active page rebuilds them fresh
+  try { if(typeof CH==='object' && CH){ Object.keys(CH).forEach(k=>{ try{ CH[k].destroy(); }catch{} delete CH[k]; }); } } catch(e){ console.warn('renderAll: chart destroy failed', e); }
+  // 3. Rebuild topbar filter options against the latest DATA
+  try { if(typeof buildFilters==='function') buildFilters(); } catch(e){ console.warn('renderAll: buildFilters failed', e); }
+  // 4. Re-render whatever page the user is currently looking at (tables + KPIs + charts)
+  try {
+    const active=document.querySelector('.page.active');
+    if(active) renderPage(active.id.replace('p-',''));
+  } catch(e){ console.warn('renderAll: renderPage failed', e); }
+  // 5. Refresh sidebar counters, diff banner, fullscreen buttons, adjustment badge
+  try { if(typeof updateSidebar==='function') updateSidebar(); } catch{}
+  try { if(typeof renderDiffBanner==='function') renderDiffBanner(); } catch{}
+  try { setTimeout(injectFullscreenButtons, 50); } catch{}
+  try { updateAdjBadge(); } catch{}
 }
 
 // ── FILE EVENTS ───────────────────────────────────────────────────────────────
