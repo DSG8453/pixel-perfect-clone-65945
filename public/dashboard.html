@@ -6635,11 +6635,13 @@ function renderHealthMvM(allData, allMonths, statusFilter){
 }
 
 function renderHealthRange(allData, allMonths, statusFilter){
-  const mFrom = $('hMonthFrom')?.value;
-  const mTo   = $('hMonthTo')?.value;
-  if(!mFrom||!mTo) return;
-  const iFrom=allMonths.indexOf(mFrom), iTo=allMonths.indexOf(mTo);
-  if(iFrom<0||iTo<0||iFrom>iTo) return;
+  let mFrom = $('hMonthFrom')?.value;
+  let mTo   = $('hMonthTo')?.value;
+  if(!mFrom||!mTo){ mFrom=allMonths[0]; mTo=allMonths[allMonths.length-1]; }
+  let iFrom=allMonths.indexOf(mFrom), iTo=allMonths.indexOf(mTo);
+  if(iFrom<0) iFrom=0;
+  if(iTo<0) iTo=allMonths.length-1;
+  if(iFrom>iTo){ const tmp=iFrom; iFrom=iTo; iTo=tmp; mFrom=allMonths[iFrom]; mTo=allMonths[iTo]; }
   const months=allMonths.slice(iFrom,iTo+1);
 
   $('h-table-title').textContent = `${mFrom} → ${mTo}  (${months.length} months)`;
