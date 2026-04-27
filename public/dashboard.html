@@ -4011,19 +4011,49 @@ function renderOvLaneChart(){
 }
 
 // ── PAGE: AP ──────────────────────────────────────────────────────────────────
+// Helpers: which Ascend loads have already been paid (per uploaded AP sheet)
+// or collected (per uploaded AR sheet)?
+function _paidLoadIdsFromAP(){
+  const s = new Set();
+  if(!Array.isArray(liveAP)) return s;
+  liveAP.forEach(r=>{
+    const lid = r.load_id;
+    if(!lid) return;
+    const applied = String(r.applied_tms||'').toLowerCase();
+    const hasPayDate = !!(r.payment_date && String(r.payment_date).trim());
+    // Treat as paid when sheet says applied=done/yes OR a payment date is recorded
+    if(applied==='done'||applied==='yes'||applied==='y'||applied==='true'||hasPayDate) s.add(lid);
+  });
+  return s;
+}
+function _collectedLoadIdsFromAR(){
+  const s = new Set();
+  if(!Array.isArray(liveAR)) return s;
+  liveAR.forEach(r=>{
+    const lid = r.load_id;
+    if(!lid) return;
+    const status = String(r.status||'').toLowerCase();
+    // Treat as collected when status says applied/paid OR an amount > 0 was recorded
+    if(status.includes('applied')||status.includes('paid')||(parseFloat(r.amount)||0)>0) s.add(lid);
+  });
+  return s;
+}
+
 function renderAP(){
-  const data=fd(d=>d.ap>0);
+  const paidSet = _paidLoadIdsFromAP();
+  const data=fd(d=>d.ap>0 && !paidSet.has(d.id));
   const all=fd();
   const totalAP=data.reduce((s,d)=>s+d.ap,0);
   const totalExp=all.reduce((s,d)=>s+d.expenses,0);
   const totalAR=all.filter(d=>d.balance>0).reduce((s,d)=>s+d.balance,0);
+  const clearedCount = paidSet.size;
   $('ap-kpi').innerHTML=kpiHTML([
     {label:'Unpaid Carrier Bills',val:fmt(totalAP),sub:`${data.length} open bills`,color:'red'},
-    {label:'Total Expenses',val:fmt(totalExp),color:'amber'},
+    {label:'Cleared via AP Sheet',val:clearedCount,sub:clearedCount?'From uploaded payment sheet':'Upload AP sheet to track',color:clearedCount?'green':''},
     {label:'AP as % of Expenses',val:totalExp>0?((totalAP/totalExp)*100).toFixed(1)+'%':'—',color:'amber'},
     {label:'AR Outstanding',val:fmt(totalAR),sub:'Cross-reference',color:totalAR>0?'red':''},
   ]);
-  $('ap-hint').textContent=`${data.length} unpaid bills · ${fmt(totalAP)} owed to carriers`;
+  $('ap-hint').textContent=`${data.length} unpaid bills · ${fmt(totalAP)} owed to carriers${clearedCount?` · ${clearedCount} cleared via uploaded AP sheet`:''}`;
 
   const sorted=data.sort((a,b)=>b.ap-a.ap);
   $('ap-tbl').querySelector('thead').innerHTML=tHead(['Load ID','Customer','Branch','Carrier','MC#','Date','Bill Date','Amount Owed','Status']);
