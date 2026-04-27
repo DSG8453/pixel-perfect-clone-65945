@@ -3394,6 +3394,8 @@ function expandStatus(s){
 function save(){
   try{localStorage.setItem('asc_d',JSON.stringify(DATA));localStorage.setItem('asc_f',JSON.stringify(FILES));}catch(e){}
   scheduleCloudSync();
+  // Refresh recon flags whenever Ascend data changes (upload, branch assign, adjustments)
+  try{ if(typeof runLiveRecon==='function') runLiveRecon(); }catch(e){}
 }
 function saveTeams(){
   try{
