@@ -3394,6 +3394,8 @@ function expandStatus(s){
 function save(){
   try{localStorage.setItem('asc_d',JSON.stringify(DATA));localStorage.setItem('asc_f',JSON.stringify(FILES));}catch(e){}
   scheduleCloudSync();
+  // Refresh recon flags whenever Ascend data changes (upload, branch assign, adjustments)
+  try{ if(typeof runLiveRecon==='function') runLiveRecon(); }catch(e){}
 }
 function saveTeams(){
   try{
@@ -5407,6 +5409,45 @@ function runLiveRecon(){
   const baseFlags = [...(RECON_DATA.flags||[])];
   const liveFlags = [];
 
+  // ── ASCEND-ONLY CHECKS (run whenever Ascend CSV is loaded) ──
+  if(allLoads.length){
+    const seen = {};
+    allLoads.forEach(l=>{
+      const lid = l.id;
+      if(lid==null || lid==='') return;
+      // Duplicate Load IDs in Ascend
+      seen[lid] = (seen[lid]||0) + 1;
+      const inc = parseFloat(l.income||l.invoice_amount||0)||0;
+      const exp = parseFloat(l.bill_amount||l.expense||0)||0;
+      // Missing customer
+      if(!l.customer || String(l.customer).trim()===''){
+        liveFlags.push({type:'Ascend',severity:'MEDIUM',flag:'Missing customer in Ascend',load_id:lid,
+          detail:`Carrier: ${l.carrier||'?'} | Income: ${fmt(inc)}`,amount:inc});
+      }
+      // Missing carrier
+      if(!l.carrier || String(l.carrier).trim()===''){
+        liveFlags.push({type:'Ascend',severity:'MEDIUM',flag:'Missing carrier in Ascend',load_id:lid,
+          detail:`Customer: ${l.customer||'?'} | Income: ${fmt(inc)}`,amount:inc});
+      }
+      // Negative gross profit
+      if(inc>0 && exp>0 && (inc-exp) < 0){
+        liveFlags.push({type:'Ascend',severity:'HIGH',flag:'Negative gross profit on Ascend load',load_id:lid,
+          detail:`Customer: ${l.customer||'?'} | Income: ${fmt(inc)} | Expense: ${fmt(exp)} | Loss: ${fmt(inc-exp)}`,amount:exp-inc});
+      }
+      // Zero income but has expense
+      if(inc===0 && exp>0){
+        liveFlags.push({type:'Ascend',severity:'HIGH',flag:'Ascend load has expense but no income',load_id:lid,
+          detail:`Carrier: ${l.carrier||'?'} | Expense: ${fmt(exp)}`,amount:exp});
+      }
+    });
+    Object.keys(seen).forEach(lid=>{
+      if(seen[lid] > 1){
+        liveFlags.push({type:'Ascend',severity:'MEDIUM',flag:'Duplicate Load ID in Ascend',load_id:lid,
+          detail:`Appears ${seen[lid]} times in Ascend export`,amount:0});
+      }
+    });
+  }
+
   // ── AP CHECK (Carrier Payment Sheet vs Ascend) ──
   const apSource = liveAP || RECON_DATA.ap || [];
   apSource.forEach(row=>{
@@ -5475,9 +5516,9 @@ function runLiveRecon(){
     }
   });
 
-  // Merge: use live flags if sheets were loaded, else base flags
+  // Merge: always include Ascend-derived liveFlags; add embedded baseFlags only when no AP/AR sheet uploaded
   const useBase = !liveAP && !liveAR;
-  const finalFlags = useBase ? baseFlags : liveFlags;
+  const finalFlags = useBase ? [...baseFlags, ...liveFlags] : liveFlags;
 
   // Update RECON_DATA in memory for renderRecon to use
   RECON_DATA._liveFlags = finalFlags;
