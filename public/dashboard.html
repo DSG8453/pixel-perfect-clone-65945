@@ -5109,47 +5109,72 @@ function parseARRows(rows){
   }).filter(r=>r.load_id>0);
 }
 
+function _xlsxSheetToObjs(ws){
+  // raw:false → values formatted as user sees them (dates → strings); defval keeps shape
+  const json = XLSX.utils.sheet_to_json(ws, {defval:'', raw:false});
+  return json.map(r=>{ const o={}; Object.keys(r).forEach(k=>o[String(k).toLowerCase().trim()]=String(r[k]==null?'':r[k])); return o; });
+}
+
+async function _readWorkbookSheets(file, mode){
+  // mode: 'first' (AP — single sheet) | 'all' (AR — merge every sheet that looks like a payment log)
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  if(mode==='first'){
+    // Pick first sheet that has data rows
+    for(const name of wb.SheetNames){
+      const rows = _xlsxSheetToObjs(wb.Sheets[name]);
+      if(rows.length) return rows;
+    }
+    return [];
+  }
+  // 'all' — concatenate every sheet's data rows. Skip sheets without a recognizable load column.
+  let out = [];
+  wb.SheetNames.forEach(name=>{
+    const rows = _xlsxSheetToObjs(wb.Sheets[name]);
+    if(!rows.length) return;
+    const sample = rows[0];
+    const hasLoad = Object.keys(sample).some(k => /load\s*(number|#|id)?/.test(k));
+    if(!hasLoad) return;
+    out = out.concat(rows);
+  });
+  return out;
+}
+
 async function handleAPFile(input){
   const file = input.files[0];
   if(!file) return;
-  if(file.name.endsWith('.csv')){
-    const text = await file.text();
-    const rows = parseCSVText(text);
-    applySmartLoad('ap', parseAPRows(rows), file.name);
-  } else {
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {type:'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(ws, {defval:''});
-      const norm = json.map(r=>{ const o={}; Object.keys(r).forEach(k=>o[k.toLowerCase().trim()]=String(r[k]||'')); return o; });
-      applySmartLoad('ap', parseAPRows(norm), file.name);
-    } catch(e){
-      $('ap-loaded-info').textContent = '⚠ Could not read xlsx. Try saving as CSV first.';
-      $('ap-loaded-info').style.color='var(--red)';
+  try {
+    let rows;
+    if(file.name.toLowerCase().endsWith('.csv')){
+      const text = await file.text();
+      rows = parseCSVText(text);
+    } else {
+      rows = await _readWorkbookSheets(file, 'first');
     }
+    applySmartLoad('ap', parseAPRows(rows), file.name);
+  } catch(e){
+    console.error('AP upload error', e);
+    $('ap-loaded-info').textContent = '⚠ Could not read file: '+(e.message||e);
+    $('ap-loaded-info').style.color='var(--red)';
   }
 }
 
 async function handleARFile(input){
   const file = input.files[0];
   if(!file) return;
-  if(file.name.endsWith('.csv')){
-    const text = await file.text();
-    const rows = parseCSVText(text);
-    applySmartLoad('ar', parseARRows(rows), file.name);
-  } else {
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {type:'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(ws, {defval:''});
-      const norm = json.map(r=>{ const o={}; Object.keys(r).forEach(k=>o[k.toLowerCase().trim()]=String(r[k]||'')); return o; });
-      applySmartLoad('ar', parseARRows(norm), file.name);
-    } catch(e){
-      $('ar-loaded-info').textContent = '⚠ Could not read xlsx. Try saving as CSV first.';
-      $('ar-loaded-info').style.color='var(--red)';
+  try {
+    let rows;
+    if(file.name.toLowerCase().endsWith('.csv')){
+      const text = await file.text();
+      rows = parseCSVText(text);
+    } else {
+      rows = await _readWorkbookSheets(file, 'all');
     }
+    applySmartLoad('ar', parseARRows(rows), file.name);
+  } catch(e){
+    console.error('AR upload error', e);
+    $('ar-loaded-info').textContent = '⚠ Could not read file: '+(e.message||e);
+    $('ar-loaded-info').style.color='var(--red)';
   }
 }
 
