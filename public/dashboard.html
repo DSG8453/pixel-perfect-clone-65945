@@ -5400,7 +5400,8 @@ function closeSheetPreview(){
   _previewData = [];
 }
 
-function runLiveRecon(){
+function runLiveRecon(opts={}){
+  rebuildLoadsIndex();
   // Build a lookup of Ascend loads: load_id → {income, bill_amount, carrier, customer, status}
   const allLoads = window.LOADS_DATA || [];
   const ascendByLoad = {};
@@ -5529,11 +5530,14 @@ function runLiveRecon(){
 
   const highCount = finalFlags.filter(f=>f.severity==='HIGH').length;
   const medCount = finalFlags.filter(f=>f.severity==='MEDIUM').length;
-  $('lc-status').textContent = `✓ Check complete — ${highCount} high, ${medCount} medium flags found`;
-  $('lc-status').style.color = highCount>0?'var(--red)':'var(--green)';
+  const statusEl = $('lc-status');
+  if(statusEl && !opts.silent){
+    statusEl.textContent = `✓ Check complete — ${highCount} high, ${medCount} medium flags found`;
+    statusEl.style.color = highCount>0?'var(--red)':'var(--green)';
+  }
 
   rfFilter = 'ALL';
-  renderRecon();
+  if(!opts.silent) renderRecon();
 }
 
 // ── PAGE: WEEKLY PAYMENTS ─────────────────────────────────────────────────────
