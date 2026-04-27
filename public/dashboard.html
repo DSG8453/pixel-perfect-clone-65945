@@ -5534,7 +5534,7 @@ function renderWeekly(){
   ]);
 
   // AR table — recent entries sorted by date desc
-  const arSorted = [...ar].sort((a,b)=>b.date.localeCompare(a.date));
+  const arSorted = [...ar].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   $('wk-ar-hint').textContent = `${ar.length} payments · ${fmt(arTotal)}`;
   $('wk-ar-tbl').querySelector('thead').innerHTML = tHead(['Date','Customer','Load #','Method','Amount','Status']);
   $('wk-ar-tbl').querySelector('tbody').innerHTML = arSorted.slice(0,60).map(r=>`<tr>
@@ -5547,7 +5547,7 @@ function renderWeekly(){
   </tr>`).join('');
 
   // AP table — sorted by due date
-  const apSorted = [...ap].sort((a,b)=>a.due_date.localeCompare(b.due_date));
+  const apSorted = [...ap].sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||'')));
   $('wk-ap-hint').textContent = `${ap.length} payments · ${fmt(apTotal)}`;
   $('wk-ap-tbl').querySelector('thead').innerHTML = tHead(['Due','Load #','Carrier','Factoring','Amount','Applied']);
   $('wk-ap-tbl').querySelector('tbody').innerHTML = apSorted.map(r=>`<tr ${!r.applied_tms?'style="background:var(--red-l)"':''}>
