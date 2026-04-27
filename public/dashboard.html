@@ -4725,66 +4725,31 @@ function ulGetLastAPDate(month){
 }
 
 function persistUploadLog(){
-  // Serialize UPLOAD_LOG + MONTH_STATUS back into the HTML script tag placeholder
-  // This runs client-side — the updated data stays in memory and is exported to Drive
-  autoSaveToDrive();
-}
-
-// ── AUTO-SAVE TO GOOGLE DRIVE ─────────────────────────────────────────────────
-let _saveTimeout = null;
-let _saving = false;
-
-function autoSaveToDrive(){
-  if(_saveTimeout) clearTimeout(_saveTimeout);
-  _saveTimeout = setTimeout(_doSaveToDrive, 1500); // debounce 1.5s
-}
-
-async function _doSaveToDrive(){
-  if(_saving) return;
-  _saving = true;
-  showToast('💾 Saving to Drive...', 'info');
+  // Persist UPLOAD_LOG + MONTH_STATUS + current liveAP/liveAR to localStorage,
+  // then trigger debounced cloud sync so other devices/sessions get the update.
   try {
-    // Build updated HTML with serialized UPLOAD_LOG + MONTH_STATUS
-    const html = buildUpdatedHTML();
-    const blob = new Blob([html], {type:'text/html'});
-    const file = new File([blob], 'ascend_admin_dashboard.html', {type:'text/html'});
-
-    // Upload via Google Drive MCP (the dashboard already uses this pattern)
-    const formData = new FormData();
-    formData.append('file', file);
-
-    // Use fetch to call Anthropic API which has Drive MCP connected
-    // Since we're in a dashboard context, we save via the built-in Drive MCP
-    const resp = await fetch('https://drivemcp.googleapis.com/mcp/v1', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        method: 'gdrive_upload_file',
-        params: {
-          name: 'ascend_admin_dashboard.html',
-          mimeType: 'text/html',
-          content: btoa(unescape(encodeURIComponent(html))),
-          overwrite: true
-        }
-      })
-    });
-    showToast('✅ Saved to Drive', 'success');
-  } catch(e) {
-    showToast('⚠ Drive save failed — data safe in browser', 'warn');
-  }
-  _saving = false;
+    localStorage.setItem('asc_ap_batches', JSON.stringify(UPLOAD_LOG.filter(b=>b.type==='ap')));
+    localStorage.setItem('asc_ar_batches', JSON.stringify(UPLOAD_LOG.filter(b=>b.type==='ar')));
+    localStorage.setItem('asc_month_status', JSON.stringify(MONTH_STATUS));
+    if(typeof liveAP !== 'undefined' && liveAP) localStorage.setItem('asc_live_ap', JSON.stringify(liveAP));
+    if(typeof liveAR !== 'undefined' && liveAR) localStorage.setItem('asc_live_ar', JSON.stringify(liveAR));
+  } catch(e){ console.warn('persistUploadLog: localStorage write failed', e); }
+  try { if(typeof scheduleCloudSync === 'function') scheduleCloudSync(); } catch(e){}
 }
 
-function buildUpdatedHTML(){
-  // Replace the UPLOAD_LOG and MONTH_STATUS placeholders in the current HTML
-  // For now returns a download-ready blob — full Drive integration requires server token
-  const src = document.documentElement.outerHTML;
-  const logJSON = JSON.stringify(UPLOAD_LOG);
-  const statusJSON = JSON.stringify(MONTH_STATUS);
-  // Replace the two placeholder lines
-  return src
-    .replace(/let UPLOAD_LOG = \[.*?\];/, `let UPLOAD_LOG = ${logJSON};`)
-    .replace(/let MONTH_STATUS = \{.*?\};/, `let MONTH_STATUS = ${statusJSON};`);
+// Restore UPLOAD_LOG + liveAP/liveAR from localStorage on boot (idempotent)
+function hydrateUploadLog(){
+  try {
+    const ap = JSON.parse(localStorage.getItem('asc_ap_batches')||'[]');
+    const ar = JSON.parse(localStorage.getItem('asc_ar_batches')||'[]');
+    const ms = JSON.parse(localStorage.getItem('asc_month_status')||'{}');
+    UPLOAD_LOG = [...ap, ...ar];
+    MONTH_STATUS = ms || {};
+    const lap = localStorage.getItem('asc_live_ap');
+    const lar = localStorage.getItem('asc_live_ar');
+    if(lap) liveAP = JSON.parse(lap);
+    if(lar) liveAR = JSON.parse(lar);
+  } catch(e){ console.warn('hydrateUploadLog failed', e); }
 }
 
 // ── TOAST NOTIFICATIONS ───────────────────────────────────────────────────────
