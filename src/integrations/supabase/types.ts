@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_state: {
+        Row: {
+          state: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          state?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          state?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       csx_snapshots: {
         Row: {
           diff_summary: Json | null
@@ -22,6 +40,7 @@ export type Database = {
           load_count: number
           loads: Json
           uploaded_at: string
+          user_id: string
         }
         Insert: {
           diff_summary?: Json | null
@@ -30,6 +49,7 @@ export type Database = {
           load_count?: number
           loads: Json
           uploaded_at?: string
+          user_id: string
         }
         Update: {
           diff_summary?: Json | null
@@ -38,6 +58,7 @@ export type Database = {
           load_count?: number
           loads?: Json
           uploaded_at?: string
+          user_id?: string
         }
         Relationships: []
       }
