@@ -5005,20 +5005,22 @@ function _saveToLog(type, rows, sourceName){
 let rfFilter = 'ALL';
 
 // Build global LOADS_DATA lookup from Ascend DATA for reconciliation engine
-// Called once after DATA is available (on first page render)
-function buildLoadsIndex(){
-  if(window.LOADS_DATA && window.LOADS_DATA.length > 0) return;
+// Rebuilt whenever DATA changes so Red Flags always uses the latest Ascend CSV.
+function rebuildLoadsIndex(){
   window.LOADS_DATA = (window.DATA || DATA || []).map(d=>({
     id: d.id,
     customer: d.customer,
     carrier: d.carrier,
     income: parseFloat(d.income||d.rate||0),
-    expense: parseFloat(d.expense||d.bill_amount||d.carrier_rate||0),
-    bill_amount: parseFloat(d.bill_amount||d.expense||d.carrier_rate||0),
+    expense: parseFloat(d.expenses||d.expense||d.bill_amount||d.carrier_rate||0),
+    bill_amount: parseFloat(d.expenses||d.bill_amount||d.expense||d.carrier_rate||0),
     invoice_amount: parseFloat(d.income||d.rate||0),
     status: d.status,
     branch: d.branch,
   }));
+}
+function buildLoadsIndex(){
+  rebuildLoadsIndex();
 }
 function renderRecon(){
   buildLoadsIndex();
