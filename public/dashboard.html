@@ -5514,9 +5514,9 @@ function runLiveRecon(){
     }
   });
 
-  // Merge: use live flags if sheets were loaded, else base flags
+  // Merge: always include Ascend-derived liveFlags; add embedded baseFlags only when no AP/AR sheet uploaded
   const useBase = !liveAP && !liveAR;
-  const finalFlags = useBase ? baseFlags : liveFlags;
+  const finalFlags = useBase ? [...baseFlags, ...liveFlags] : liveFlags;
 
   // Update RECON_DATA in memory for renderRecon to use
   RECON_DATA._liveFlags = finalFlags;
