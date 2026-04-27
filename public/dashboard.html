@@ -6,6 +6,7 @@
 <title>Ascend Admin Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
   // Lovable Cloud connection (publishable anon key — safe to embed)
   window.__SB_URL__  = "https://lngqtiqpfevlyzrbvapl.supabase.co";
@@ -1515,6 +1516,7 @@ async function onAuthSuccess(user){
   document.getElementById('auth-overlay').style.display='none';
   document.getElementById('app-shell').style.display='';
   CLOUD_LOAD_DONE=true;
+  try { hydrateUploadLog(); } catch(e){ console.warn('hydrate err',e); }
   init();
   // Show user email + logout in sidebar meta
   const meta=document.getElementById('sb-meta');
@@ -4724,66 +4726,31 @@ function ulGetLastAPDate(month){
 }
 
 function persistUploadLog(){
-  // Serialize UPLOAD_LOG + MONTH_STATUS back into the HTML script tag placeholder
-  // This runs client-side — the updated data stays in memory and is exported to Drive
-  autoSaveToDrive();
-}
-
-// ── AUTO-SAVE TO GOOGLE DRIVE ─────────────────────────────────────────────────
-let _saveTimeout = null;
-let _saving = false;
-
-function autoSaveToDrive(){
-  if(_saveTimeout) clearTimeout(_saveTimeout);
-  _saveTimeout = setTimeout(_doSaveToDrive, 1500); // debounce 1.5s
-}
-
-async function _doSaveToDrive(){
-  if(_saving) return;
-  _saving = true;
-  showToast('💾 Saving to Drive...', 'info');
+  // Persist UPLOAD_LOG + MONTH_STATUS + current liveAP/liveAR to localStorage,
+  // then trigger debounced cloud sync so other devices/sessions get the update.
   try {
-    // Build updated HTML with serialized UPLOAD_LOG + MONTH_STATUS
-    const html = buildUpdatedHTML();
-    const blob = new Blob([html], {type:'text/html'});
-    const file = new File([blob], 'ascend_admin_dashboard.html', {type:'text/html'});
-
-    // Upload via Google Drive MCP (the dashboard already uses this pattern)
-    const formData = new FormData();
-    formData.append('file', file);
-
-    // Use fetch to call Anthropic API which has Drive MCP connected
-    // Since we're in a dashboard context, we save via the built-in Drive MCP
-    const resp = await fetch('https://drivemcp.googleapis.com/mcp/v1', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        method: 'gdrive_upload_file',
-        params: {
-          name: 'ascend_admin_dashboard.html',
-          mimeType: 'text/html',
-          content: btoa(unescape(encodeURIComponent(html))),
-          overwrite: true
-        }
-      })
-    });
-    showToast('✅ Saved to Drive', 'success');
-  } catch(e) {
-    showToast('⚠ Drive save failed — data safe in browser', 'warn');
-  }
-  _saving = false;
+    localStorage.setItem('asc_ap_batches', JSON.stringify(UPLOAD_LOG.filter(b=>b.type==='ap')));
+    localStorage.setItem('asc_ar_batches', JSON.stringify(UPLOAD_LOG.filter(b=>b.type==='ar')));
+    localStorage.setItem('asc_month_status', JSON.stringify(MONTH_STATUS));
+    if(typeof liveAP !== 'undefined' && liveAP) localStorage.setItem('asc_live_ap', JSON.stringify(liveAP));
+    if(typeof liveAR !== 'undefined' && liveAR) localStorage.setItem('asc_live_ar', JSON.stringify(liveAR));
+  } catch(e){ console.warn('persistUploadLog: localStorage write failed', e); }
+  try { if(typeof scheduleCloudSync === 'function') scheduleCloudSync(); } catch(e){}
 }
 
-function buildUpdatedHTML(){
-  // Replace the UPLOAD_LOG and MONTH_STATUS placeholders in the current HTML
-  // For now returns a download-ready blob — full Drive integration requires server token
-  const src = document.documentElement.outerHTML;
-  const logJSON = JSON.stringify(UPLOAD_LOG);
-  const statusJSON = JSON.stringify(MONTH_STATUS);
-  // Replace the two placeholder lines
-  return src
-    .replace(/let UPLOAD_LOG = \[.*?\];/, `let UPLOAD_LOG = ${logJSON};`)
-    .replace(/let MONTH_STATUS = \{.*?\};/, `let MONTH_STATUS = ${statusJSON};`);
+// Restore UPLOAD_LOG + liveAP/liveAR from localStorage on boot (idempotent)
+function hydrateUploadLog(){
+  try {
+    const ap = JSON.parse(localStorage.getItem('asc_ap_batches')||'[]');
+    const ar = JSON.parse(localStorage.getItem('asc_ar_batches')||'[]');
+    const ms = JSON.parse(localStorage.getItem('asc_month_status')||'{}');
+    UPLOAD_LOG = [...ap, ...ar];
+    MONTH_STATUS = ms || {};
+    const lap = localStorage.getItem('asc_live_ap');
+    const lar = localStorage.getItem('asc_live_ar');
+    if(lap) liveAP = JSON.parse(lap);
+    if(lar) liveAR = JSON.parse(lar);
+  } catch(e){ console.warn('hydrateUploadLog failed', e); }
 }
 
 // ── TOAST NOTIFICATIONS ───────────────────────────────────────────────────────
@@ -5108,47 +5075,72 @@ function parseARRows(rows){
   }).filter(r=>r.load_id>0);
 }
 
+function _xlsxSheetToObjs(ws){
+  // raw:false → values formatted as user sees them (dates → strings); defval keeps shape
+  const json = XLSX.utils.sheet_to_json(ws, {defval:'', raw:false});
+  return json.map(r=>{ const o={}; Object.keys(r).forEach(k=>o[String(k).toLowerCase().trim()]=String(r[k]==null?'':r[k])); return o; });
+}
+
+async function _readWorkbookSheets(file, mode){
+  // mode: 'first' (AP — single sheet) | 'all' (AR — merge every sheet that looks like a payment log)
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  if(mode==='first'){
+    // Pick first sheet that has data rows
+    for(const name of wb.SheetNames){
+      const rows = _xlsxSheetToObjs(wb.Sheets[name]);
+      if(rows.length) return rows;
+    }
+    return [];
+  }
+  // 'all' — concatenate every sheet's data rows. Skip sheets without a recognizable load column.
+  let out = [];
+  wb.SheetNames.forEach(name=>{
+    const rows = _xlsxSheetToObjs(wb.Sheets[name]);
+    if(!rows.length) return;
+    const sample = rows[0];
+    const hasLoad = Object.keys(sample).some(k => /load\s*(number|#|id)?/.test(k));
+    if(!hasLoad) return;
+    out = out.concat(rows);
+  });
+  return out;
+}
+
 async function handleAPFile(input){
   const file = input.files[0];
   if(!file) return;
-  if(file.name.endsWith('.csv')){
-    const text = await file.text();
-    const rows = parseCSVText(text);
-    applySmartLoad('ap', parseAPRows(rows), file.name);
-  } else {
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {type:'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(ws, {defval:''});
-      const norm = json.map(r=>{ const o={}; Object.keys(r).forEach(k=>o[k.toLowerCase().trim()]=String(r[k]||'')); return o; });
-      applySmartLoad('ap', parseAPRows(norm), file.name);
-    } catch(e){
-      $('ap-loaded-info').textContent = '⚠ Could not read xlsx. Try saving as CSV first.';
-      $('ap-loaded-info').style.color='var(--red)';
+  try {
+    let rows;
+    if(file.name.toLowerCase().endsWith('.csv')){
+      const text = await file.text();
+      rows = parseCSVText(text);
+    } else {
+      rows = await _readWorkbookSheets(file, 'first');
     }
+    applySmartLoad('ap', parseAPRows(rows), file.name);
+  } catch(e){
+    console.error('AP upload error', e);
+    $('ap-loaded-info').textContent = '⚠ Could not read file: '+(e.message||e);
+    $('ap-loaded-info').style.color='var(--red)';
   }
 }
 
 async function handleARFile(input){
   const file = input.files[0];
   if(!file) return;
-  if(file.name.endsWith('.csv')){
-    const text = await file.text();
-    const rows = parseCSVText(text);
-    applySmartLoad('ar', parseARRows(rows), file.name);
-  } else {
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {type:'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(ws, {defval:''});
-      const norm = json.map(r=>{ const o={}; Object.keys(r).forEach(k=>o[k.toLowerCase().trim()]=String(r[k]||'')); return o; });
-      applySmartLoad('ar', parseARRows(norm), file.name);
-    } catch(e){
-      $('ar-loaded-info').textContent = '⚠ Could not read xlsx. Try saving as CSV first.';
-      $('ar-loaded-info').style.color='var(--red)';
+  try {
+    let rows;
+    if(file.name.toLowerCase().endsWith('.csv')){
+      const text = await file.text();
+      rows = parseCSVText(text);
+    } else {
+      rows = await _readWorkbookSheets(file, 'all');
     }
+    applySmartLoad('ar', parseARRows(rows), file.name);
+  } catch(e){
+    console.error('AR upload error', e);
+    $('ar-loaded-info').textContent = '⚠ Could not read file: '+(e.message||e);
+    $('ar-loaded-info').style.color='var(--red)';
   }
 }
 
@@ -5217,19 +5209,25 @@ function applySmartLoad(type, newRows, source){
   $(type+'-clear-btn').style.display = 'inline-block';
   if(vb) vb.style.display = 'inline-block';
 
-  // Save to persistent batch log
+  // Save to persistent batch log (also persists liveAP/liveAR + cloud sync)
   _saveToLog(type, newRows, source);
 
-  // Auto-run reconciliation silently
-  setTimeout(() => runLiveRecon(), 100);
+  // Auto-run reconciliation, then refresh every dashboard tab so all KPIs/tables reflect new data
+  setTimeout(() => {
+    try { runLiveRecon(); } catch(e){ console.warn('runLiveRecon err',e); }
+    try { if(typeof renderAll==='function') renderAll(); } catch(e){ console.warn('renderAll err',e); }
+    try { if(typeof scheduleCloudSync==='function') scheduleCloudSync(); } catch(e){}
+  }, 50);
 
   return true;
 }
 
 function clearSheet(type){
-  if(type==='ap'){ liveAP=null; $('ap-loaded-info').textContent=''; $('ap-clear-btn').style.display='none'; $('ap-file-input').value=''; const vb=$('ap-view-btn'); if(vb)vb.style.display='none'; }
-  else { liveAR=null; $('ar-loaded-info').textContent=''; $('ar-clear-btn').style.display='none'; $('ar-file-input').value=''; const vb=$('ar-view-btn'); if(vb)vb.style.display='none'; }
+  if(type==='ap'){ liveAP=null; $('ap-loaded-info').textContent=''; $('ap-clear-btn').style.display='none'; $('ap-file-input').value=''; const vb=$('ap-view-btn'); if(vb)vb.style.display='none'; try{localStorage.removeItem('asc_live_ap');}catch{} }
+  else { liveAR=null; $('ar-loaded-info').textContent=''; $('ar-clear-btn').style.display='none'; $('ar-file-input').value=''; const vb=$('ar-view-btn'); if(vb)vb.style.display='none'; try{localStorage.removeItem('asc_live_ar');}catch{} }
   $('lc-status').textContent = 'Sheet cleared';
+  try { if(typeof scheduleCloudSync==='function') scheduleCloudSync(); } catch{}
+  try { runLiveRecon(); if(typeof renderAll==='function') renderAll(); } catch{}
 }
 
 // ── SHEET PREVIEW MODAL ───────────────────────────────────────────────────────
