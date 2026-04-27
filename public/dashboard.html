@@ -5494,11 +5494,37 @@ function runLiveRecon(){
 
 // ── PAGE: WEEKLY PAYMENTS ─────────────────────────────────────────────────────
 function renderWeekly(){
-  const ar = RECON_DATA.ar;
-  const ap = RECON_DATA.ap;
+  // Prefer uploaded sheets; fall back to embedded RECON_DATA. Normalise field names
+  // because uploaded rows have {load_id, amount, status, customer, applied_tms, payment_date, _raw}
+  // while embedded RECON_DATA rows have {date, customer, load_id, method, amount, status} / {due_date, load_id, carrier, factoring, amount, applied_tms}
+  const _norm = (r, kind)=>{
+    const raw = r._raw || {};
+    if(kind==='ar'){
+      return {
+        date: r.date || raw['date'] || raw['DATE'] || '',
+        customer: r.customer || raw['customer name'] || raw['CUSTOMER NAME'] || '',
+        load_id: r.load_id,
+        method: r.method || raw['check/ach'] || raw['CHECK/ACH'] || '',
+        amount: parseFloat(r.amount)||0,
+        status: r.status || raw['ascend status'] || raw['ASCEND STATUS'] || ''
+      };
+    }
+    return {
+      due_date: r.due_date || raw['due date'] || raw['Due date'] || raw['payment date'] || '',
+      load_id: r.load_id,
+      carrier: r.carrier || raw['carrier name'] || '',
+      factoring: r.factoring || raw['factoring'] || 'N/A',
+      amount: parseFloat(r.amount)||0,
+      applied_tms: r.applied_tms || raw['applied on tms'] || ''
+    };
+  };
+  const arRaw = (Array.isArray(liveAR) && liveAR.length) ? liveAR.map(r=>_norm(r,'ar')) : RECON_DATA.ar;
+  const apRaw = (Array.isArray(liveAP) && liveAP.length) ? liveAP.map(r=>_norm(r,'ap')) : RECON_DATA.ap;
+  const ar = arRaw;
+  const ap = apRaw;
   const arTotal = ar.reduce((s,r)=>s+r.amount,0);
   const apTotal = ap.reduce((s,r)=>s+r.amount,0);
-  const notApplied = ap.filter(r=>!r.applied_tms||r.applied_tms==='').length;
+  const notApplied = ap.filter(r=>!r.applied_tms || String(r.applied_tms).toLowerCase().trim()===''|| String(r.applied_tms).toLowerCase()==='n/a').length;
 
   $('wk-kpi').innerHTML=kpiHTML([
     {label:'AR Collected (sheet)',val:fmt(arTotal),sub:`${ar.length} payments recorded`,color:'green'},
