@@ -6160,10 +6160,10 @@ function processCSV(text,fname,team){
 
 async function csxSaveSnapshot(fname, allLoads, diff){
   const client = sb();
-  if(!client) return;
+  if(!client || !CURRENT_USER) return;
   try{
-    // Insert this snapshot
     await client.from('csx_snapshots').insert({
+      user_id: CURRENT_USER.id,
       file_name: fname,
       load_count: allLoads.length,
       loads: allLoads,
@@ -6177,9 +6177,9 @@ async function csxSaveSnapshot(fname, allLoads, diff){
         removed_ids: diff.removed.slice(0,500)
       }
     });
-    // Cleanup snapshots older than retention
+    // Cleanup this user's snapshots older than retention
     const cutoffISO = new Date(Date.now() - CSX_RETENTION_DAYS*24*60*60*1000).toISOString();
-    await client.from('csx_snapshots').delete().lt('uploaded_at', cutoffISO);
+    await client.from('csx_snapshots').delete().eq('user_id', CURRENT_USER.id).lt('uploaded_at', cutoffISO);
   } catch(err){
     console.warn('CSX snapshot save failed:', err);
   }
