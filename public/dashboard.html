@@ -329,26 +329,9 @@ input[type=file]{display:none}
     <div class="nav-item" onclick="go('upload',this)"><span class="ni">⊕</span> Add Data</div>
   </nav>
   <div class="sidebar-bottom">
-    <!-- Row 1: Upload CSV -->
-    <button onclick="document.getElementById('fi').click()"
-      style="width:100%;padding:7px 10px;border:1px solid rgba(255,255,255,.25);border-radius:6px;background:rgba(59,130,246,.25);color:#93c5fd;font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:6px">
-      ⬆ Upload CSV
-    </button>
+    <!-- Hidden inputs kept so legacy handlers still bind without errors -->
     <input type="file" id="fi" accept=".csv" multiple style="display:none">
-
-    <!-- Row 2: Backup / Restore -->
-    <div style="display:flex;gap:5px;margin-bottom:6px">
-      <button onclick="exportAllData()" title="Save full backup to Google Drive"
-        style="flex:1;padding:6px 0;border:1px solid rgba(255,255,255,.18);border-radius:5px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">
-        💾 Backup
-      </button>
-      <button onclick="document.getElementById('import-file-input').click()" title="Restore from JSON backup"
-        style="flex:1;padding:6px 0;border:1px solid rgba(255,255,255,.18);border-radius:5px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">
-        📂 Restore
-      </button>
-      <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllData(this)">
-    </div>
-
+    <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllData(this)">
     <div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:600;text-align:center" id="sb-loads">—</div>
   </div>
 </aside>
