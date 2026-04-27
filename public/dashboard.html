@@ -6459,6 +6459,8 @@ function handleFiles(files){
       // show branch assignment modal
       showBranchModal(records, file.name);
       renderDiffBanner();
+      // Ensure dashboard reflects new data even if the user dismisses the branch modal
+      try { renderAll(); } catch(e){ console.warn('handleFiles: renderAll failed', e); }
     };
     reader.readAsText(file);
   });
