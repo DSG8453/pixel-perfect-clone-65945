@@ -6501,9 +6501,15 @@ function getReturnedStatus(allMonths, cuData, ma, mb){
 }
 
 function renderHealthMvM(allData, allMonths, statusFilter){
-  const ma = $('hMonthA')?.value;
-  const mb = $('hMonthB')?.value;
-  if(!ma || !mb || ma===mb) return;
+  let ma = $('hMonthA')?.value;
+  let mb = $('hMonthB')?.value;
+  if(!ma || !mb){ ma = allMonths[0]; mb = allMonths[allMonths.length-1]; }
+  if(ma===mb){
+    // auto-pick a different base if user selected the same month
+    const idx = allMonths.indexOf(mb);
+    ma = idx>0 ? allMonths[idx-1] : allMonths[idx+1];
+    if($('hMonthA')) $('hMonthA').value = ma;
+  }
 
   $('h-table-title').textContent = `${ma}  vs  ${mb}`;
 
