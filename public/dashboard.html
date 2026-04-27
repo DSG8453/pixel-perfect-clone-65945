@@ -5414,39 +5414,51 @@ function runLiveRecon(opts={}){
   const liveFlags = [];
 
   // ── ASCEND-ONLY CHECKS (run whenever Ascend CSV is loaded) ──
+  // Only flag *meaningful* anomalies — skip in-progress / un-booked loads to avoid noise.
   if(allLoads.length){
     const seen = {};
+    const pushed = new Set(); // dedupe by load_id+flag
+    const addFlag = (f)=>{
+      const k = f.load_id+'|'+f.flag;
+      if(pushed.has(k)) return;
+      pushed.add(k);
+      liveFlags.push(f);
+    };
     allLoads.forEach(l=>{
       const lid = l.id;
       if(lid==null || lid==='') return;
-      // Duplicate Load IDs in Ascend
       seen[lid] = (seen[lid]||0) + 1;
       const inc = parseFloat(l.income||l.invoice_amount||0)||0;
       const exp = parseFloat(l.bill_amount||l.expense||0)||0;
-      // Missing customer
-      if(!l.customer || String(l.customer).trim()===''){
-        liveFlags.push({type:'Ascend',severity:'MEDIUM',flag:'Missing customer in Ascend',load_id:lid,
+      const status = String(l.status||'').toLowerCase();
+      const isCancelled = status.includes('cancel') || status.includes('void');
+      if(isCancelled) return; // never flag cancelled loads
+      const isBooked = inc>0 || exp>0; // ignore empty/draft loads
+
+      // Missing customer — only when load has money attached
+      if(isBooked && (!l.customer || String(l.customer).trim()==='')){
+        addFlag({type:'Ascend',severity:'MEDIUM',flag:'Missing customer in Ascend',load_id:lid,
           detail:`Carrier: ${l.carrier||'?'} | Income: ${fmt(inc)}`,amount:inc});
       }
-      // Missing carrier
-      if(!l.carrier || String(l.carrier).trim()===''){
-        liveFlags.push({type:'Ascend',severity:'MEDIUM',flag:'Missing carrier in Ascend',load_id:lid,
-          detail:`Customer: ${l.customer||'?'} | Income: ${fmt(inc)}`,amount:inc});
+      // Missing carrier — only when there's a carrier expense (load is booked out)
+      if(exp>0 && (!l.carrier || String(l.carrier).trim()==='')){
+        addFlag({type:'Ascend',severity:'MEDIUM',flag:'Missing carrier in Ascend',load_id:lid,
+          detail:`Customer: ${l.customer||'?'} | Expense: ${fmt(exp)}`,amount:exp});
       }
-      // Negative gross profit
-      if(inc>0 && exp>0 && (inc-exp) < 0){
-        liveFlags.push({type:'Ascend',severity:'HIGH',flag:'Negative gross profit on Ascend load',load_id:lid,
+      // Negative gross profit — material loss only (>$1)
+      if(inc>0 && exp>0 && (inc-exp) < -1){
+        addFlag({type:'Ascend',severity:'HIGH',flag:'Negative gross profit on Ascend load',load_id:lid,
           detail:`Customer: ${l.customer||'?'} | Income: ${fmt(inc)} | Expense: ${fmt(exp)} | Loss: ${fmt(inc-exp)}`,amount:exp-inc});
       }
-      // Zero income but has expense
-      if(inc===0 && exp>0){
-        liveFlags.push({type:'Ascend',severity:'HIGH',flag:'Ascend load has expense but no income',load_id:lid,
-          detail:`Carrier: ${l.carrier||'?'} | Expense: ${fmt(exp)}`,amount:exp});
+      // Zero income but has expense (only if delivered/closed)
+      if(inc===0 && exp>0 && (status.includes('deliver') || status.includes('invoice') || status.includes('paid') || status.includes('complete'))){
+        addFlag({type:'Ascend',severity:'HIGH',flag:'Ascend load has expense but no income',load_id:lid,
+          detail:`Carrier: ${l.carrier||'?'} | Status: ${l.status||'?'} | Expense: ${fmt(exp)}`,amount:exp});
       }
     });
     Object.keys(seen).forEach(lid=>{
       if(seen[lid] > 1){
-        liveFlags.push({type:'Ascend',severity:'MEDIUM',flag:'Duplicate Load ID in Ascend',load_id:lid,
+        addFlag({type:'Ascend',severity:'MEDIUM',flag:'Duplicate Load ID in Ascend',load_id:lid,
           detail:`Appears ${seen[lid]} times in Ascend export`,amount:0});
       }
     });
