@@ -6445,7 +6445,15 @@ function go(page,el){
 function renderHealth(){
   const allData = DATA; // use full dataset, not topbar-filtered fd()
   const allMonths = sortMonths([...new Set(allData.map(d=>d.month).filter(Boolean))]);
-  if(!allMonths.length){ $('h-alert-banner').innerHTML='<div style="padding:12px;color:var(--text3);font-size:13px">No data available.</div>'; return; }
+  const emptyMsg = (msg)=>{
+    $('h-alert-banner').innerHTML='<div style="padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-size:13px">'+msg+'</div>';
+    if($('h-kpi')) $('h-kpi').innerHTML='';
+    const t=$('h-tbl'); if(t){ t.querySelector('thead').innerHTML=''; t.querySelector('tbody').innerHTML=''; }
+    if($('h-hint')) $('h-hint').textContent='';
+    if($('h-table-title')) $('h-table-title').textContent='Monthly Health';
+  };
+  if(!allMonths.length){ emptyMsg('No data available. Upload an Ascend CSV from the Upload tab to populate Monthly Health.'); return; }
+  if(allMonths.length<2){ emptyMsg('Monthly Health needs at least 2 months of data to compare. Currently loaded: '+allMonths[0]+'. Upload more months from the Upload tab.'); return; }
 
   // Populate month selects on first call
   const populateSel = (id, months, defaultLast) => {
