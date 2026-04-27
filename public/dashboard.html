@@ -269,7 +269,30 @@ input[type=file]{display:none}
 </style>
 </head>
 <body>
-<div class="app">
+
+<!-- LOGIN OVERLAY (shown until authenticated) -->
+<div id="auth-overlay" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#0f172a;font-family:'Inter',system-ui,sans-serif;color:#fff;padding:20px">
+  <div style="width:100%;max-width:380px;background:#1e293b;border:1px solid #334155;border-radius:14px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="font-size:22px;font-weight:600;letter-spacing:-.01em">Ascend Admin</div>
+      <div id="auth-sub" style="font-size:13px;color:#94a3b8;margin-top:4px">Sign in to your dashboard</div>
+    </div>
+    <form id="auth-form" onsubmit="return false" style="display:flex;flex-direction:column;gap:10px">
+      <input id="auth-email" type="email" autocomplete="email" placeholder="Email" required
+        style="padding:10px 12px;border:1px solid #334155;border-radius:8px;background:#0f172a;color:#fff;font-size:14px;font-family:inherit">
+      <input id="auth-pass" type="password" autocomplete="current-password" placeholder="Password (min 6 chars)" required minlength="6"
+        style="padding:10px 12px;border:1px solid #334155;border-radius:8px;background:#0f172a;color:#fff;font-size:14px;font-family:inherit">
+      <div id="auth-error" style="font-size:12px;color:#f87171;min-height:16px"></div>
+      <button id="auth-login-btn" onclick="doLogin()"
+        style="padding:11px;background:#2563eb;border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Sign in</button>
+      <button id="auth-signup-btn" onclick="doSignup()"
+        style="padding:11px;background:transparent;border:1px solid #334155;border-radius:8px;color:#cbd5e1;font-size:13px;cursor:pointer;font-family:inherit">Create account</button>
+    </form>
+    <div id="auth-status" style="font-size:11px;color:#64748b;text-align:center;margin-top:14px"></div>
+  </div>
+</div>
+
+<div class="app" style="display:none" id="app-shell">
 
 <!-- SIDEBAR -->
 <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
