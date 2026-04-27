@@ -6392,10 +6392,11 @@ function handleFiles(files){
 
       if(!records.length&&!updates){
         renderDiffBanner();
+        renderAll();
         alert(`No new or updated loads found in ${file.name}.\n\n🆕 ${diff.new.length} • 🟡 ${diff.updated.length} • 🔴 ${diff.removed.length}`);
         return;
       }
-      if(updates>0){save();buildFilters();renderAll();updateSidebar();renderDiffBanner();}
+      if(updates>0){save();renderAll();renderDiffBanner();}
       if(!records.length){
         const msg=`✓ Updated ${updates} existing load${updates!==1?'s':''} from ${file.name}.\n\n🆕 ${diff.new.length} New • 🟡 ${diff.updated.length} Updated • 🔴 ${diff.removed.length} Removed`;
         alert(msg);return;
