@@ -3385,6 +3385,7 @@ function expandStatus(s){
 
 function save(){
   try{localStorage.setItem('asc_d',JSON.stringify(DATA));localStorage.setItem('asc_f',JSON.stringify(FILES));}catch(e){}
+  scheduleCloudSync();
 }
 function saveTeams(){
   try{
@@ -3392,6 +3393,7 @@ function saveTeams(){
     localStorage.setItem('asc_branch_history',JSON.stringify(BRANCH_HISTORY));
     localStorage.setItem('asc_snapshots',JSON.stringify(TEAM_SNAPSHOTS));
   }catch(e){}
+  scheduleCloudSync();
 }
 function updateBranchHistory(records, teamName){
   records.forEach(r=>{
