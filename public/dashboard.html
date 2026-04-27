@@ -1516,6 +1516,7 @@ async function onAuthSuccess(user){
   document.getElementById('auth-overlay').style.display='none';
   document.getElementById('app-shell').style.display='';
   CLOUD_LOAD_DONE=true;
+  try { hydrateUploadLog(); } catch(e){ console.warn('hydrate err',e); }
   init();
   // Show user email + logout in sidebar meta
   const meta=document.getElementById('sb-meta');
